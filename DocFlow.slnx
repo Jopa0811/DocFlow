@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="DocFlow.Api/DocFlow.Api.csproj" />
+  <Project Path="DocFlow.Client/DocFlow.Client.csproj" />
+  <Project Path="DocFlow.Messaging/DocFlow.Messaging.csproj" />
+  <Project Path="DocFlow.SearchIndexer/DocFlow.SearchIndexer.csproj" />
+  <Project Path="DocFlow.Shared/DocFlow.Shared.csproj" />
+</Solution>

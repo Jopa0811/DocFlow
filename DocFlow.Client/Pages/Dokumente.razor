@@ -1,0 +1,173 @@
+@page "/"
+@using DocFlow.Shared
+@inject HttpClient Http
+
+<PageTitle>Dokumentenverwaltung</PageTitle>
+
+<h1>Dokumente</h1>
+<p class="lead">Neues Dokument anlegen, automatisch indexieren lassen und durchsuchen.</p>
+
+@if (errorMessage is not null)
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+<section class="card">
+    <h2>Neues Dokument</h2>
+    <EditForm Model="newDokument" OnValidSubmit="AddDokumentAsync" @key="newDokument">
+        <DataAnnotationsValidator />
+        <div class="mb-2">
+            <InputText @bind-Value="newDokument.Titel" class="form-control" placeholder="Titel, z. B. Mandantenvereinbarung Müller" />
+            <ValidationMessage For="() => newDokument.Titel" />
+        </div>
+        <div class="mb-2">
+            <InputTextArea @bind-Value="newDokument.Inhalt" class="form-control" rows="4" placeholder="Inhalt des Dokuments..." />
+            <ValidationMessage For="() => newDokument.Inhalt" />
+        </div>
+        <button class="btn btn-primary" type="submit" disabled="@isSaving">Speichern</button>
+    </EditForm>
+</section>
+
+<section class="card">
+    <h2>Suche <span class="text-muted small">(Elasticsearch)</span></h2>
+    <div class="input-group mb-2">
+        <input class="form-control" placeholder="Suchbegriff..." @bind="searchTerm" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+        <button class="btn btn-outline-secondary" type="button" @onclick="SearchAsync" disabled="@isSearching">Suchen</button>
+    </div>
+
+    @if (searchResults is not null)
+    {
+        @if (searchResults.Count == 0)
+        {
+            <p><em>Keine Treffer für "@lastSearchTerm".</em></p>
+        }
+        else
+        {
+            <ul class="list-group">
+                @foreach (var result in searchResults)
+                {
+                    <li class="list-group-item">
+                        <strong>@result.Titel</strong>
+                        <div class="text-muted small">@Snippet(result.Inhalt)</div>
+                    </li>
+                }
+            </ul>
+        }
+    }
+</section>
+
+<section class="card">
+    <h2>Alle Dokumente</h2>
+    @if (dokumente is null)
+    {
+        <p><em>Lade...</em></p>
+    }
+    else
+    {
+        <ul class="list-group">
+            @foreach (var dokument in dokumente)
+            {
+                <li class="list-group-item">
+                    <strong>@dokument.Titel</strong>
+                    <span class="text-muted small"> — @dokument.ErstelltAmUtc.ToLocalTime().ToString("g")</span>
+                    <div class="text-muted small">@Snippet(dokument.Inhalt)</div>
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    private List<DokumentDto>? dokumente;
+    private List<DokumentDto>? searchResults;
+    private CreateDokumentRequest newDokument = new();
+    private bool isSaving;
+    private bool isSearching;
+    private string? errorMessage;
+    private string searchTerm = string.Empty;
+    private string lastSearchTerm = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDokumenteAsync();
+    }
+
+    private async Task LoadDokumenteAsync()
+    {
+        try
+        {
+            dokumente = await Http.GetFromJsonAsync<List<DokumentDto>>("api/dokumente");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Dokumente konnten nicht geladen werden: {ex.Message}";
+        }
+    }
+
+    private async Task AddDokumentAsync()
+    {
+        isSaving = true;
+        errorMessage = null;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/dokumente", newDokument);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var validationError = await response.Content.ReadFromJsonAsync<ValidationErrorResponse>();
+                errorMessage = validationError is null
+                    ? "Das Dokument ist ungültig."
+                    : string.Join(" ", validationError.Errors.SelectMany(e => e.Value));
+                return;
+            }
+
+            response.EnsureSuccessStatusCode();
+            newDokument = new CreateDokumentRequest();
+            await LoadDokumenteAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Dokument konnte nicht gespeichert werden: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchAsync();
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            searchResults = null;
+            return;
+        }
+
+        isSearching = true;
+        errorMessage = null;
+        try
+        {
+            lastSearchTerm = searchTerm;
+            searchResults = await Http.GetFromJsonAsync<List<DokumentDto>>($"api/dokumente/search?q={Uri.EscapeDataString(searchTerm)}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Suche fehlgeschlagen: {ex.Message}";
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private static string Snippet(string inhalt)
+        => inhalt.Length > 140 ? inhalt[..140] + "…" : inhalt;
+}
