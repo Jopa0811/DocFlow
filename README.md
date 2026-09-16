@@ -53,8 +53,4 @@ dotnet run --project DocFlow.Client
 ```
 
 - Api: https://localhost:7133
-- Client: https://localhost:7166 (or http://localhost:5166)
-
-### 3. Try it
-
-Open the Client, create a new Verfahren or Projekt, and watch the status column go from `Wird indexiert...` to `Fertig` automatically once the SearchIndexer finishes.
+- Client: https://localhost:7166 (or http://localhost:5166)d
